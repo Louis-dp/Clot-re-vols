@@ -137,8 +137,14 @@ tr.dont td:first-child { padding-left: 22px; }
 .tot-line strong { font-family: var(--font-mono); font-size: 22px; font-weight: 500; }
 .hint { font-size: 12px; color: var(--muted); margin: 0; }
 
-.counters { display: grid; gap: 8px; }
-.counter { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Compteurs sur deux colonnes : nom au-dessus, compteur en dessous */
+.counters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.counter > label { font-size: 14px; font-weight: 500; }
+.counter .stepper { width: 100%; }
+.counter .stepper input { flex: 1 1 auto; width: auto; min-width: 0; }
+.counter .stepper button { flex: none; width: 42px; }
+.counter input.meca { width: 100%; text-align: center; min-height: 42px; padding: 6px 8px; }
+.counter { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; align-content: start; }
 .counter span { font-weight: 500; }
 .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--sunken); }
 .stepper button { width: 44px; height: 40px; border: none; background: transparent; font-size: 20px; color: var(--accent); }
@@ -329,11 +335,17 @@ img { max-width: 100%; }
 
         <div class="field">
           <span class="label">MECA, atterrissages et aérocordage</span>
-          <div class="counter">
-            <label for="f-meca">MECA</label>
-            <input type="text" id="f-meca" class="tin num" inputmode="decimal" placeholder="0" autocomplete="off" style="width:144px;text-align:center">
+          <div class="counters" id="counters">
+            <div class="counter">
+              <label for="f-meca">MECA</label>
+              <input type="text" id="f-meca" class="tin num meca" inputmode="decimal" placeholder="0" autocomplete="off">
+            </div>
           </div>
-          <div class="counters" id="counters"></div>
+        </div>
+
+        <div class="field">
+          <span class="label" id="amv-label">AMV</span>
+          <div class="counters" id="amv" role="group" aria-labelledby="amv-label"></div>
         </div>
 
         <div class="field">
@@ -405,6 +417,11 @@ img { max-width: 100%; }
             <span class="label">MECA, atterrissages et aérocordage</span>
             <div class="pills" id="works"></div>
           </div>
+
+          <div class="field">
+            <span class="label">AMV</span>
+            <div class="pills" id="amvs"></div>
+          </div>
         </div>
       </section>
 
@@ -458,6 +475,16 @@ img { max-width: 100%; }
     { k: "nacelle", label: "Nacelle",       col: "NACELLE" },
     { k: "sling",   label: "Sling",         col: "SLING" }
   ];
+  // AMV : nombre d'approches par type et par vol (les vols saisis avec l'ancienne case cochée comptent pour 1)
+  var AMVS = [
+    { k: "ils", label: "ILS" },
+    { k: "vor", label: "VOR" },
+    { k: "ndb", label: "NDB" },
+    { k: "rnp", label: "RNP" },
+    { k: "gca", label: "GCA" },
+    { k: "poa", label: "POA" }
+  ];
+  function amvN(f, k) { var v = f.amv && f.amv[k]; return typeof v === "number" ? v : (v ? 1 : 0); }
   var NATS = [
     { k: "vt",     label: "VT" },
     { k: "mep",    label: "MEP A/R" },
@@ -785,6 +812,20 @@ img { max-width: 100%; }
       row.appendChild(lab); row.appendChild(st);
       counters.appendChild(row);
     });
+    AMVS.forEach(function (a) {
+      var row = el("div", "counter");
+      var lab = el("label", null, a.label); lab.htmlFor = "f-amv-" + a.k;
+      var st = el("div", "stepper");
+      var minus = el("button", null, "−"); minus.type = "button"; minus.setAttribute("aria-label", a.label + " moins un");
+      var inp = el("input"); inp.type = "text"; inp.id = "f-amv-" + a.k; inp.inputMode = "numeric"; inp.value = "0"; inp.autocomplete = "off";
+      var plus = el("button", null, "+"); plus.type = "button"; plus.setAttribute("aria-label", a.label + " plus un");
+      minus.addEventListener("click", function () { var v = parseInt(inp.value, 10) || 0; inp.value = Math.max(0, v - 1); });
+      plus.addEventListener("click", function () { var v = parseInt(inp.value, 10) || 0; inp.value = v + 1; });
+      inp.addEventListener("focus", function () { inp.select(); });
+      st.appendChild(minus); st.appendChild(inp); st.appendChild(plus);
+      row.appendChild(lab); row.appendChild(st);
+      $("amv").appendChild(row);
+    });
     $("f-date").value = todayIso();
     $("form").addEventListener("submit", onSubmit);
     $("f-cancel").addEventListener("click", resetForm);
@@ -861,6 +902,12 @@ img { max-width: 100%; }
       data[COUNTS[j].k] = n; if (n > 0) anyCount = true;
     }
     if (tot === 0 && meca === 0 && !anyCount) return fail("Le vol est vide : saisissez au moins une durée.");
+    data.amv = {};
+    for (var y = 0; y < AMVS.length; y++) {
+      var ra = $("f-amv-" + AMVS[y].k).value.trim(), na = ra === "" ? 0 : Number(ra);
+      if (!(na >= 0) || Math.floor(na) !== na) return fail("AMV " + AMVS[y].label + " : saisissez un nombre entier.");
+      data.amv[AMVS[y].k] = na;
+    }
     data.updatedAt = new Date().toISOString();
 
     var btn = $("f-submit"); btn.disabled = true;
@@ -882,6 +929,7 @@ img { max-width: 100%; }
       var i = $("f-" + id); i.value = ""; delete i.dataset.disp; delete i.dataset.min;
     });
     COUNTS.forEach(function (c) { $("f-" + c.k).value = "0"; });
+    AMVS.forEach(function (a) { $("f-amv-" + a.k).value = "0"; });
     $("f-meca").value = ""; $("f-note").value = "";
     delete $("f-mission").dataset.touched;
     $("f-mission").value = missionById(currentMission()) ? currentMission() : "";
@@ -901,6 +949,7 @@ img { max-width: 100%; }
     NATS.forEach(function (n) { fill("n-" + n.k, natMin(f, n.k)); });
     SUBS.forEach(function (s) { fill("d-" + s.k, subMin(f, s.k)); });
     COUNTS.forEach(function (c) { $("f-" + c.k).value = f[c.k] || 0; });
+    AMVS.forEach(function (a) { $("f-amv-" + a.k).value = amvN(f, a.k); });
     $("f-meca").value = f.meca ? String(f.meca).replace(".", ",") : "";
     $("f-note").value = f.note || "";
     $("form-title").textContent = "Modifier le vol";
@@ -958,11 +1007,13 @@ img { max-width: 100%; }
     var all = { n: 0, tot: 0, meca: 0 }, nb = {};
     CATS.forEach(function (c) { all[c.k] = 0; nb[c.k] = 0; });
     COUNTS.forEach(function (c) { all[c.k] = 0; });
+    AMVS.forEach(function (a) { all["a-" + a.k] = 0; });
     list.forEach(function (f) {
       all.n += 1;
       CATS.forEach(function (c) { var v = (f.h && f.h[c.k]) || 0; all[c.k] += v; all.tot += v; if (v) nb[c.k] += 1; });
       all.meca += f.meca || 0;
       COUNTS.forEach(function (c) { all[c.k] += f[c.k] || 0; });
+      AMVS.forEach(function (a) { all["a-" + a.k] += amvN(f, a.k); });
     });
     // Natures rangées dans `all` sous les clés n-vt, n-mep… (utiles aussi pour l'export)
     var sumJ = 0, sumN = 0;
@@ -1106,6 +1157,8 @@ img { max-width: 100%; }
     var works = $("works"); works.textContent = "";
     works.appendChild(el("span", "pill cnt", "MECA " + fmtNum(s.all.meca)));
     COUNTS.forEach(function (c) { works.appendChild(el("span", "pill cnt", c.label + " " + fmtNum(s.all[c.k]))); });
+    var amvs = $("amvs"); amvs.textContent = "";
+    AMVS.forEach(function (a) { amvs.appendChild(el("span", "pill cnt", a.label + " " + s.all["a-" + a.k])); });
 
     // Export
     $("export").hidden = !downloads;
@@ -1144,6 +1197,8 @@ img { max-width: 100%; }
       });
       if (f.meca) pills.appendChild(el("span", "pill cnt", "MECA " + fmtNum(f.meca)));
       COUNTS.forEach(function (c) { if (f[c.k]) pills.appendChild(el("span", "pill cnt", c.label + " " + f[c.k])); });
+      var on = AMVS.filter(function (a) { return amvN(f, a.k) > 0; }).map(function (a) { return a.label + " " + amvN(f, a.k); });
+      if (on.length) pills.appendChild(el("span", "pill cnt", "AMV " + on.join(", ")));
       if (pills.children.length) card.appendChild(pills);
       if (f.note) card.appendChild(el("p", "fnote", f.note));
       var act = el("div", "actions");
@@ -1183,6 +1238,7 @@ img { max-width: 100%; }
     cols.push({ head: "TOT", key: "tot", hours: true, tot: true });
     cols.push({ head: "MECA", key: "meca", get: function (f) { return f.meca || 0; } });
     COUNTS.forEach(function (c) { cols.push({ head: c.col, key: c.k, get: function (f) { return f[c.k] || 0; } }); });
+    AMVS.forEach(function (a) { cols.push({ head: "AMV " + a.label, key: "a-" + a.k, get: function (f) { return amvN(f, a.k); } }); });
     SUBS.forEach(function (sb) { cols.push({ head: catLabel(sb.parent) + " " + sb.label, key: "d-" + sb.k, hours: true, get: function (f) { return subMin(f, sb.k); } }); });
     NATS.forEach(function (x) {
       SIDES.forEach(function (sd) { cols.push({ head: x.label + " " + sd.s, key: "n" + sd.s + "-" + x.k, hours: true, get: function (f) { return natSide(f, x.k, sd.s); } }); });

@@ -1,6 +1,6 @@
 /* Fonctionnement hors réseau : les fichiers de l'application sont gardés sur l'iPad.
    Pour publier une nouvelle version, modifier VERSION ci-dessous : l'iPad la récupérera à la prochaine ouverture avec réseau. */
-var VERSION = "cloture-v2";
+var VERSION = "cloture-v5";
 var FONTS = "cloture-polices";
 var FILES = [
   "./",
