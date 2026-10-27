@@ -1,0 +1,1338 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e5b4e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Clôture vols">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Clôture des vols</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout : carnet de bord en deux volets — saisie à gauche (fixe sur grand écran), clôture et liste des vols à droite ; une seule colonne sur iPhone. */
+:root {
+  --bg: #eef1f0;
+  --surface: #ffffff;
+  --sunken: #f5f7f6;
+  --ink: #16201e;
+  --muted: #5a6865;
+  --line: #d6dddb;
+  --accent: #2e5b4e;
+  --accent-ink: #ffffff;
+  --accent-soft: #dfe9e5;
+  --day: #b97a12;
+  --day-soft: #f6ead2;
+  --night: #3c4b8f;
+  --night-soft: #e1e5f4;
+  --danger: #b3261e;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --surface: #171e1c; --sunken: #1d2523; --ink: #e6ecea; --muted: #97a5a1;
+    --line: #2a3431; --accent: #84bfa9; --accent-ink: #0d1412; --accent-soft: #22322d;
+    --day: #e3ad4c; --day-soft: #3a2f1a; --night: #93a2f2; --night-soft: #252b48; --danger: #f08a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --surface: #171e1c; --sunken: #1d2523; --ink: #e6ecea; --muted: #97a5a1;
+  --line: #2a3431; --accent: #84bfa9; --accent-ink: #0d1412; --accent-soft: #22322d;
+  --day: #e3ad4c; --day-soft: #3a2f1a; --night: #93a2f2; --night-soft: #252b48; --danger: #f08a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+header.top h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: 34px; line-height: 1; margin: 0;
+  letter-spacing: .01em; text-transform: uppercase; text-wrap: balance;
+}
+header.top p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status.ok .dot { background: var(--accent); }
+.status.warn .dot { background: var(--day); }
+
+.cols { display: grid; gap: 20px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 980px) {
+  .cols { grid-template-columns: 390px minmax(0, 1fr); }
+  .panel-form { position: sticky; top: calc(16px + env(safe-area-inset-top, 0px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+.panel-head { padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.panel-head h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 20px; text-transform: uppercase; letter-spacing: .04em; }
+.panel-body { padding: 16px; display: grid; gap: 18px; }
+
+.label { font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.field { display: grid; gap: 6px; }
+input[type="date"], input[type="text"], textarea, .tin {
+  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; min-height: 44px;
+}
+textarea { min-height: 64px; resize: vertical; }
+input:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Heures de vol : grille type planche d'instruments */
+.hours { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hcell { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 8px; background: var(--sunken); display: grid; gap: 4px; position: relative; }
+.hcell::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 2px 2px 0; background: var(--day); }
+.hcell.night::before { background: var(--night); }
+.hcell label { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .05em; display: flex; justify-content: space-between; gap: 6px; }
+.hcell label small { font-family: var(--font-body); font-weight: 500; font-size: 11px; letter-spacing: 0; color: var(--muted); }
+.hcell input { width: 100%; border: none; background: transparent; padding: 2px 0; font-family: var(--font-mono); font-size: 20px; min-height: 32px; }
+.hcell input:focus { box-shadow: none; }
+.hcell .parsed { font-size: 11px; color: var(--muted); min-height: 15px; font-family: var(--font-mono); }
+.hcell.bad { border-color: var(--danger); }
+.hcell.bad .parsed { color: var(--danger); }
+.hcell.nat::before { background: var(--accent); }
+.hcell { align-content: start; }
+th.jcol { color: var(--day); }
+th.ncol { color: var(--night); }
+.subs { display: grid; gap: 4px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.subs .subhead { font-size: 11px; color: var(--muted); font-style: italic; }
+.subrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.hcell .subrow label { display: block; font-family: var(--font-body); font-weight: 500; font-size: 11px; letter-spacing: 0; color: var(--muted); }
+.hcell .subrow label { white-space: nowrap; }
+.hcell .subrow input { width: 52px; flex: none; font-size: 15px; text-align: right; min-height: 28px; border-bottom: 1px solid var(--line); }
+.subrow.bad label, .subrow.bad input { color: var(--danger); }
+tr.dont td { color: var(--muted); font-size: 12px; }
+tr.dont td:first-child { padding-left: 22px; }
+.pill.dont { background: transparent; border: 1px dashed var(--line); }
+.check { font-size: 13px; padding: 8px 12px; border-radius: 8px; background: var(--sunken); border: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.check.ok { border-color: var(--accent); color: var(--accent); }
+.check.warn { border-color: var(--day); background: var(--day-soft); }
+.pill.nat { background: var(--accent-soft); }
+.tot-line { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+.tot-line strong { font-family: var(--font-mono); font-size: 22px; font-weight: 500; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+
+.counters { display: grid; gap: 8px; }
+.counter { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.counter span { font-weight: 500; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--sunken); }
+.stepper button { width: 44px; height: 40px; border: none; background: transparent; font-size: 20px; color: var(--accent); }
+.stepper button:active { background: var(--accent-soft); }
+.stepper input { width: 56px; text-align: center; border: none; background: transparent; font-family: var(--font-mono); font-size: 17px; min-height: 40px; padding: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--sunken); border-radius: 999px; padding: 7px 14px; min-height: 38px;
+  font-family: var(--font-mono); font-size: 14px;
+}
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 10px 16px; min-height: 44px; font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); flex: 1; font-weight: 600; }
+.btn.small { min-height: 34px; padding: 5px 12px; font-size: 13px; }
+.btn.danger { color: var(--danger); }
+.btn.danger.armed { background: var(--danger); color: var(--surface); border-color: var(--danger); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.msg { font-size: 13px; min-height: 18px; margin: 0; }
+.msg.err { color: var(--danger); }
+.msg.ok { color: var(--accent); }
+
+/* Période */
+.period { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; background: var(--surface); padding: 7px 12px; font-size: 13px; min-height: 36px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.nav { display: inline-flex; align-items: center; gap: 4px; }
+.nav button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 18px; }
+.nav .plabel { font-family: var(--font-display); font-weight: 600; font-size: 20px; min-width: 150px; text-align: center; text-transform: capitalize; }
+.range { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.range input { width: auto; min-height: 36px; padding: 6px 8px; }
+
+.demo { font-size: 13px; background: var(--day-soft); border-radius: 8px; padding: 9px 12px; }
+
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tile { background: var(--surface); padding: 12px 14px; display: grid; gap: 2px; }
+.tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (min-width: 640px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } .tile:last-child:nth-child(odd) { grid-column: auto; } }
+.tile .v { font-family: var(--font-mono); font-size: 24px; font-variant-numeric: tabular-nums; }
+.tile .v.day { color: var(--day); }
+.tile .v.night { color: var(--night); }
+
+/* Barres par type de vol */
+.bars { display: grid; gap: 9px; }
+.bar { display: grid; grid-template-columns: 92px minmax(0, 1fr) 64px; gap: 10px; align-items: center; }
+.bar .n { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .04em; white-space: nowrap; }
+.bar .track { height: 14px; background: var(--sunken); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
+.bar .fill { height: 100%; background: var(--day); border-radius: 2px; }
+.bar.night .fill { background: var(--night); }
+.bar .val { text-align: right; font-family: var(--font-mono); font-size: 14px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* Tableau de clôture */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 7px 9px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: .05em; color: var(--muted); background: var(--sunken); position: sticky; top: 0; }
+th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+th:first-child { background: var(--sunken); }
+td { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+td.zero { color: var(--muted); }
+tr.total td { font-weight: 600; background: var(--accent-soft); }
+tr.total td:first-child { background: var(--accent-soft); }
+tr.sub td { background: var(--sunken); font-style: normal; }
+tr.sub td:first-child { background: var(--sunken); }
+td.code { font-family: var(--font-mono); }
+th.sep, td.sep { border-left: 1px solid var(--line); }
+
+/* Liste des vols */
+.flights { display: grid; gap: 8px; }
+.flight { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.flight.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.frow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fdate { font-weight: 600; text-transform: capitalize; }
+.fcode { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; margin-left: 6px; color: var(--muted); }
+.ftot { font-family: var(--font-mono); font-size: 17px; }
+.pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.pill { font-size: 12px; border-radius: 4px; padding: 2px 7px; background: var(--day-soft); font-family: var(--font-mono); }
+.pill.night { background: var(--night-soft); }
+.pill.cnt { background: var(--sunken); border: 1px solid var(--line); }
+.fnote { font-size: 13px; color: var(--muted); margin: 0; }
+.empty { text-align: center; color: var(--muted); padding: 22px 12px; border: 1px dashed var(--line); border-radius: 8px; font-size: 14px; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fmt { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+.bmsg { flex-basis: 100%; margin: 0; color: var(--muted); }
+.bmsg.ok { color: var(--accent); }
+.bmsg.err { color: var(--danger); }
+.mbar { padding: 14px 16px; display: grid; gap: 10px; }
+.mrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.mrow .label { white-space: nowrap; }
+select.tin { appearance: auto; font-weight: 500; }
+.mbar .msel { flex: 1 1 240px; min-width: 0; width: auto; }
+.mname { flex: 1 1 240px; min-width: 0; width: auto; }
+.minfo { margin: 0; font-size: 13px; color: var(--muted); }
+.minfo strong { color: var(--ink); font-weight: 600; }
+.mtag { font-size: 12px; color: var(--accent); font-weight: 500; margin-left: 8px; }
+
+@media (max-width: 420px) {
+  header.top h1 { font-size: 28px; }
+  .nav .plabel { min-width: 120px; font-size: 18px; }
+  .bar { grid-template-columns: 76px minmax(0, 1fr) 52px; gap: 8px; }
+  .bar .n { font-size: 14px; letter-spacing: .02em; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fill { transition: width .35s ease; }
+}
+
+/* Base (équivalent du cadre de la version en ligne) */
+html { -webkit-text-size-adjust: 100%; }
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Clôture des vols</h1>
+      <p>Saisie vol par vol, récapitulatif par type de vol et par durée.</p>
+    </div>
+    <div class="toolbar">
+      <div class="status" id="status"><span class="dot"></span><span id="status-text">Connexion…</span></div>
+      <button type="button" class="btn small" id="b-save">Sauvegarder les données</button>
+      <button type="button" class="btn small" id="b-load">Restaurer</button>
+      <input type="file" id="b-file" accept=".json,application/json" hidden>
+    </div>
+    <p class="msg bmsg" id="b-msg" role="status"></p>
+  </header>
+
+  <!-- FEUILLET DE MISSION -->
+  <section class="panel mbar" aria-labelledby="m-label">
+    <div class="mrow">
+      <label class="label" id="m-label" for="m-select">Feuillet de mission</label>
+      <select id="m-select" class="tin msel"></select>
+      <div class="toolbar">
+        <button type="button" class="btn small" id="m-new">Nouvelle mission</button>
+        <button type="button" class="btn small" id="m-rename" hidden>Renommer</button>
+        <button type="button" class="btn small danger" id="m-delete" hidden>Supprimer</button>
+      </div>
+    </div>
+    <form class="mrow" id="m-form" hidden novalidate>
+      <input type="text" id="m-name" class="tin mname" placeholder="Nom de la mission, ex. Pyrénées 12–16 nov." autocomplete="off" maxlength="80">
+      <div class="toolbar">
+        <button type="submit" class="btn small primary" id="m-save">Créer la mission</button>
+        <button type="button" class="btn small" id="m-cancel">Annuler</button>
+      </div>
+    </form>
+    <p class="minfo" id="m-info"></p>
+    <p class="msg" id="m-msg" role="status" hidden></p>
+  </section>
+
+  <div class="cols">
+    <!-- SAISIE -->
+    <section class="panel panel-form" aria-labelledby="form-title">
+      <div class="panel-head"><h2 id="form-title">Nouveau vol</h2></div>
+      <form class="panel-body" id="form" novalidate>
+        <div class="field">
+          <label class="label" for="f-date">Date</label>
+          <input type="date" id="f-date" required>
+        </div>
+
+        <div class="field">
+          <label class="label" for="f-mission">Mission</label>
+          <select id="f-mission" class="tin msel"></select>
+        </div>
+
+        <div class="field">
+          <span class="label">Heures de vol</span>
+          <div class="hours" id="hours"></div>
+          <p class="hint">Heures en décimal, par exemple <span class="num">1,5</span> pour une heure trente.</p>
+          <div class="tot-line"><span class="label">TOT</span><strong id="f-tot">0</strong></div>
+        </div>
+
+        <div class="field">
+          <span class="label">Répartition du vol</span>
+          <div class="hours" id="natures"></div>
+          <div class="check" id="nat-check" role="status"></div>
+        </div>
+
+        <div class="field">
+          <span class="label">MECA, atterrissages et aérocordage</span>
+          <div class="counter">
+            <label for="f-meca">MECA</label>
+            <input type="text" id="f-meca" class="tin num" inputmode="decimal" placeholder="0" autocomplete="off" style="width:144px;text-align:center">
+          </div>
+          <div class="counters" id="counters"></div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="f-note">Remarques</label>
+          <textarea id="f-note" placeholder="Machine, mission, équipage…"></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn primary" id="f-submit">Enregistrer le vol</button>
+          <button type="button" class="btn" id="f-cancel" hidden>Annuler</button>
+        </div>
+        <p class="msg" id="f-msg" role="status"></p>
+      </form>
+    </section>
+
+    <!-- RÉCAP -->
+    <div style="display:grid;gap:20px;min-width:0">
+      <section class="panel" aria-labelledby="recap-title">
+        <div class="panel-head">
+          <h2 id="recap-title">Récapitulatif</h2>
+          <div class="toolbar">
+            <button type="button" class="btn small" id="export" hidden>Exporter la clôture (.xlsx)</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="period" id="period-box">
+            <div class="seg" role="group" aria-label="Période">
+              <button type="button" data-mode="month" aria-pressed="true">Mois</button>
+              <button type="button" data-mode="year" aria-pressed="false">Année</button>
+              <button type="button" data-mode="range" aria-pressed="false">Dates</button>
+            </div>
+            <div class="nav" id="nav">
+              <button type="button" id="prev" aria-label="Période précédente">‹</button>
+              <span class="plabel" id="plabel"></span>
+              <button type="button" id="next" aria-label="Période suivante">›</button>
+            </div>
+            <div class="range" id="range" hidden>
+              <input type="date" id="r-from" aria-label="Du">
+              <span>au</span>
+              <input type="date" id="r-to" aria-label="Au">
+            </div>
+          </div>
+          <p class="msg" id="x-msg" role="status" hidden></p>
+
+          <div class="demo" id="demo" hidden>Exemple fictif : ces chiffres disparaissent dès votre premier vol enregistré.</div>
+
+          <div class="tiles" id="tiles"></div>
+
+          <div class="field">
+            <span class="label">Heures par nature de vol</span>
+            <div class="tablewrap"><table id="natTable"></table></div>
+            <p class="hint" id="nat-note" hidden></p>
+          </div>
+
+          <div class="field">
+            <div class="frow">
+              <span class="label">Heures par type de vol</span>
+              <div class="legend"><span><i style="background:var(--day)"></i>Jour</span><span><i style="background:var(--night)"></i>Nuit</span></div>
+            </div>
+            <div class="bars" id="bars"></div>
+          </div>
+
+          <div class="field">
+            <span class="label">Détail par type de vol</span>
+            <div class="tablewrap"><table id="table"></table></div>
+          </div>
+
+          <div class="field">
+            <span class="label">MECA, atterrissages et aérocordage</span>
+            <div class="pills" id="works"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="list-title">
+        <div class="panel-head">
+          <h2 id="list-title">Vols de la période <span class="label" id="list-count"></span></h2>
+          <div class="fmt">
+            <span>Trier par</span>
+            <div class="seg" role="group" aria-label="Tri des vols">
+              <button type="button" id="sort-date" aria-pressed="true">date</button>
+              <button type="button" id="sort-dur" aria-pressed="false">durée</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel-body"><div class="flights" id="flights"></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="xlsx-lite.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Référentiel (colonnes du fichier Clôture) ---------- */
+  var CATS = [
+    { k: "cagIfrJ", label: "CAG IFR J", night: false },
+    { k: "cagIfrN", label: "CAG IFR N", night: true },
+    { k: "cagVfrJ", label: "CAG VFR J", night: false },
+    { k: "cagVfrN", label: "CAG VFR N", night: true },
+    { k: "camVJ",   label: "CAM V J",   night: false },
+    { k: "camVN",   label: "CAM V N",   night: true },
+    { k: "camTJ",   label: "CAM T J",   night: false },
+    { k: "camTN",   label: "CAM T N",   night: true }
+  ];
+  // Heures « dont » : détail d'une case d'heures, déjà comptées dans cette case (pas ajoutées au TOT)
+  var SUBS = [
+    { k: "voltac",     parent: "camTJ", short: "VOLTAC",      label: "dont VOLTAC" },
+    { k: "sil",        parent: "camTN", short: "SIL",         label: "dont SIL" },
+    { k: "dvtTbhn",    parent: "camTN", short: "DVT TBHN",    label: "dont DVT TBHN" },
+    { k: "dvtVoltacn", parent: "camTN", short: "DVT VOLTACN", label: "dont DVT VOLTACN" }
+  ];
+  function subsOf(k) { return SUBS.filter(function (s) { return s.parent === k; }); }
+  function catLabel(k) { return CATS.filter(function (c) { return c.k === k; })[0].label; }
+  function subMin(f, k) { return (f.d && f.d[k]) || 0; }
+  var COUNTS = [
+    { k: "att",     label: "Atterrissages", col: "ATTERRISSAGE" },
+    { k: "rappel",  label: "Rappel",        col: "RAPPEL" },
+    { k: "corde",   label: "Corde lisse",   col: "CORDE LISSE" },
+    { k: "nacelle", label: "Nacelle",       col: "NACELLE" },
+    { k: "sling",   label: "Sling",         col: "SLING" }
+  ];
+  var NATS = [
+    { k: "vt",     label: "VT" },
+    { k: "mep",    label: "MEP A/R" },
+    { k: "zone",   label: "ZONE" },
+    { k: "divers", label: "DIVERS" }
+  ];
+  var SIDES = [{ s: "J", label: "jour", night: false }, { s: "N", label: "nuit", night: true }];
+  function dayOf(f) { var t = 0; CATS.forEach(function (c) { if (!c.night) t += (f.h && f.h[c.k]) || 0; }); return t; }
+  function nightOf(f) { var t = 0; CATS.forEach(function (c) { if (c.night) t += (f.h && f.h[c.k]) || 0; }); return t; }
+  // Minutes d'un vol pour une nature (les vols saisis avec l'ancienne « nature » unique comptent en entier)
+  function natMin(f, k) {
+    if (f.nat) return f.nat[k] || 0;
+    var legacy = NATS.filter(function (n) { return n.label === f.nature; })[0];
+    return legacy && legacy.k === k ? totOf(f) : 0;
+  }
+  // Part jour (J) ou nuit (N) d'une nature. Vol entièrement de jour ou de nuit : exact.
+  // Vol mixte : la répartition ne dit pas quelle nature a eu lieu de nuit, on ventile au prorata des heures J/N du vol.
+  function natSide(f, k, side) {
+    var m = natMin(f, k), dj = dayOf(f), dn = nightOf(f);
+    if (!m || !(dj + dn)) return 0;
+    return m * (side === "J" ? dj : dn) / (dj + dn);
+  }
+  function isMixed(f) { return dayOf(f) > 0 && nightOf(f) > 0 && NATS.some(function (n) { return natMin(f, n.k) > 0; }); }
+  var MONTHS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+
+  /* ---------- Utilitaires ---------- */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function iso(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function todayIso() { return iso(new Date()); }
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+
+  // Durée saisie -> minutes entières. "" -> 0 ; invalide -> NaN
+  function parseDur(s) {
+    s = String(s == null ? "" : s).trim().toLowerCase().replace(/\s+/g, "");
+    if (s === "") return 0;
+    var m = s.match(/^(\d{1,3})[:h](\d{0,2})(min|mn|m)?$/);
+    if (m) {
+      var mm = m[2] === "" ? 0 : parseInt(m[2], 10);
+      if (mm >= 60) return NaN;
+      return parseInt(m[1], 10) * 60 + mm;
+    }
+    m = s.match(/^(\d{1,3})([.,]\d+)?$/);
+    if (m) return Math.round(parseFloat(s.replace(",", ".")) * 60 * 1e6) / 1e6;
+    return NaN;
+  }
+  function parseNum(s) {
+    s = String(s == null ? "" : s).trim().replace(/\s+/g, "").replace(",", ".");
+    if (s === "") return 0;
+    if (!/^\d+(\.\d+)?$/.test(s)) return NaN;
+    return parseFloat(s);
+  }
+  // Les durées sont stockées en minutes et toujours affichées en heures décimales
+  function fmtDur(min) { return ((min || 0) / 60).toLocaleString("fr-FR", { maximumFractionDigits: 2 }); }
+  function fmtNum(n) { return (n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 }); }
+  function totOf(f) { var t = 0; CATS.forEach(function (c) { t += (f.h && f.h[c.k]) || 0; }); return t; }
+  function longDate(isoStr) {
+    var p = isoStr.split("-"); var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  }
+
+  /* ---------- Stockage : base de l'artifact, sinon ce navigateur ---------- */
+  var flights = [];
+  var missions = [];
+  var loaded = false;
+  var store = { mode: "pending", col: null, mcol: null };
+
+  function setStatus(kind, text) {
+    $("status").className = "status " + (kind || "");
+    $("status-text").textContent = text;
+  }
+
+  function loadLocal() {
+    try { var v = JSON.parse(lsGet("cloture.vols") || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function saveLocal() { lsSet("cloture.vols", JSON.stringify(flights)); }
+  function loadLocalMissions() {
+    try { var v = JSON.parse(lsGet("cloture.missions") || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function saveLocalMissions() { lsSet("cloture.missions", JSON.stringify(missions)); }
+  function sortMissions() { missions.sort(function (a, b) { return (b.createdAt || "") < (a.createdAt || "") ? -1 : 1; }); }
+
+  function useLocal(reason) {
+    store.mode = "local";
+    flights = loadLocal();
+    missions = loadLocalMissions(); sortMissions();
+    loaded = true;
+    setStatus("ok", reason || "Enregistré sur cet appareil");
+    render();
+  }
+
+  async function initStore() {
+    var db = null;
+    try { db = (window.claude && typeof window.claude.use === "function") ? await window.claude.use("db") : null; } catch (e) { db = null; }
+    if (!db) { useLocal(); return; }
+    store.mode = "db";
+    store.col = db.collection("vols");
+    setStatus("", "Chargement des vols…");
+    store.col.onSnapshot(function (snap) {
+      flights = snap.docs.filter(function (d) { return d.exists; }).map(function (d) {
+        var o = JSON.parse(JSON.stringify(d.data())); o.id = d.id; return o;
+      });
+      loaded = true;
+      setStatus("ok", "Vols enregistrés en ligne");
+      render();
+    }, function (e) {
+      setStatus("warn", "Synchronisation interrompue, rechargez la page");
+    });
+    store.mcol = db.collection("missions");
+    store.mcol.onSnapshot(function (snap) {
+      missions = snap.docs.filter(function (d) { return d.exists; }).map(function (d) {
+        var o = JSON.parse(JSON.stringify(d.data())); o.id = d.id; return o;
+      });
+      sortMissions();
+      render();
+    }, function () {
+      setStatus("warn", "Synchronisation interrompue, rechargez la page");
+    });
+  }
+
+  async function saveMission(id, data) {
+    if (store.mode === "db") {
+      var ref = id ? store.mcol.doc(id) : store.mcol.doc();
+      await ref.set(data);
+      return ref.id;
+    }
+    if (id) { missions = missions.map(function (m) { return m.id === id ? Object.assign({ id: id }, data) : m; }); }
+    else { id = "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); missions.push(Object.assign({ id: id }, data)); }
+    sortMissions(); saveLocalMissions(); render();
+    return id;
+  }
+  async function removeMission(id) {
+    if (store.mode === "db") { await store.mcol.doc(id).delete(); return; }
+    missions = missions.filter(function (m) { return m.id !== id; });
+    saveLocalMissions(); render();
+  }
+
+  function newId() { return "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  async function saveFlight(id, data) {
+    if (store.mode === "db") {
+      var ref = id ? store.col.doc(id) : store.col.doc();
+      try { await ref.set(data); }
+      catch (e) {
+        if (e && e.code === "unavailable") { await new Promise(function (r) { setTimeout(r, 400 + Math.random() * 600); }); await ref.set(data); }
+        else throw e;
+      }
+      return;
+    }
+    if (id) { flights = flights.map(function (f) { return f.id === id ? Object.assign({ id: id }, data) : f; }); }
+    else { flights.push(Object.assign({ id: newId() }, data)); }
+    saveLocal(); render(); backupInfo();
+  }
+  async function removeFlight(id) {
+    if (store.mode === "db") { await store.col.doc(id).delete(); return; }
+    flights = flights.filter(function (f) { return f.id !== id; });
+    saveLocal(); render();
+  }
+  function errText(e) {
+    var c = e && e.code;
+    if (c === "invalid_argument") return "Vous n'avez pas le droit de modifier ces vols sur cette page.";
+    if (c === "quota_exceeded") return "La limite de stockage est atteinte : supprimez d'anciens vols.";
+    if (c === "resource_exhausted") return "Trop d'enregistrements d'un coup, réessayez dans un instant.";
+    return "Enregistrement impossible pour l'instant. Vérifiez la connexion puis réessayez.";
+  }
+
+  /* ---------- Feuillets de mission ---------- */
+  var NONE = "__sans";                       // vols rattachés à aucune mission
+  var selMission = lsGet("cloture.mission") || "";
+  var mFormMode = null;                      // "new" | "rename" | null
+  var mDelArmed = null;
+
+  function missionById(id) { return missions.filter(function (m) { return m.id === id; })[0] || null; }
+  function hasMission(f) { return !!(f.mission && missionById(f.mission)); }
+  function orphanCount() { return flights.filter(function (f) { return !hasMission(f); }).length; }
+  // Mission affichée : "" = toutes, NONE = vols sans mission, sinon l'id d'une mission existante
+  function currentMission() {
+    if (selMission === NONE) return orphanCount() ? NONE : "";
+    return missionById(selMission) ? selMission : "";
+  }
+  function inMission(f, mid) { return mid === NONE ? !hasMission(f) : f.mission === mid; }
+  function setSelMission(id) {
+    selMission = id; lsSet("cloture.mission", id);
+    if (!editingId) $("f-mission").value = missionById(id) ? id : "";
+    render();
+  }
+  function mMsg(text, kind) { var m = $("m-msg"); m.hidden = !text; m.className = "msg " + (kind || ""); m.textContent = text || ""; }
+
+  function fillSelect(sel, opts, value) {
+    sel.textContent = "";
+    opts.forEach(function (o) { var op = el("option", null, o[1]); op.value = o[0]; sel.appendChild(op); });
+    sel.value = opts.some(function (o) { return o[0] === value; }) ? value : opts[0][0];
+  }
+
+  function renderMissionBar(scoped) {
+    var cur = currentMission();
+    var opts = [["", "Toutes les missions"]].concat(missions.map(function (m) { return [m.id, m.name]; }));
+    if (orphanCount()) opts.push([NONE, "Vols sans mission"]);
+    fillSelect($("m-select"), opts, cur);
+    var real = !!missionById(cur);
+    $("m-rename").hidden = !real || !!mFormMode;
+    $("m-delete").hidden = !real || !!mFormMode;
+    $("m-new").hidden = !!mFormMode;
+    // Liste de la saisie : on garde le choix en cours s'il existe encore
+    var fsel = $("f-mission"), keep = (editingId || fsel.dataset.touched) ? fsel.value : (real ? cur : "");
+    fillSelect(fsel, [["", "Aucune mission"]].concat(missions.map(function (m) { return [m.id, m.name]; })), keep);
+    // Résumé du feuillet
+    var info = $("m-info"); info.textContent = "";
+    if (!cur) { info.textContent = missions.length ? missions.length + " mission" + (missions.length > 1 ? "s" : "") + " enregistrée" + (missions.length > 1 ? "s" : "") + ". Choisissez-en une pour voir son récapitulatif." : "Créez une mission pour regrouper les vols d'un déplacement de plusieurs jours."; return; }
+    var t = 0; scoped.forEach(function (f) { t += totOf(f); });
+    info.appendChild(el("strong", null, cur === NONE ? "Vols sans mission" : missionById(cur).name));
+    var txt = " · " + scoped.length + " vol" + (scoped.length > 1 ? "s" : "") + " · " + fmtDur(t) + " h";
+    if (scoped.length) {
+      var d0 = scoped[0].date, d1 = scoped[scoped.length - 1].date;
+      txt += " · " + (d0 === d1 ? "le " + shortDate(d0) : "du " + shortDate(d0) + " au " + shortDate(d1));
+    }
+    info.appendChild(document.createTextNode(txt));
+  }
+  function shortDate(isoStr) {
+    var p = isoStr.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function openMForm(mode) {
+    mFormMode = mode; mMsg("");
+    $("m-form").hidden = false;
+    $("m-save").textContent = mode === "new" ? "Créer la mission" : "Renommer";
+    $("m-name").value = mode === "rename" ? missionById(currentMission()).name : "";
+    render();
+    $("m-name").focus();
+  }
+  function closeMForm() { mFormMode = null; $("m-form").hidden = true; render(); }
+
+  async function onMSubmit(ev) {
+    ev.preventDefault();
+    var name = $("m-name").value.trim().replace(/\s+/g, " ");
+    if (!name) { mMsg("Donnez un nom à la mission.", "err"); return; }
+    var clash = missions.filter(function (m) { return m.name.toLowerCase() === name.toLowerCase() && !(mFormMode === "rename" && m.id === currentMission()); })[0];
+    if (clash) { mMsg("Une mission porte déjà ce nom.", "err"); return; }
+    $("m-save").disabled = true;
+    try {
+      if (mFormMode === "new") {
+        var id = await saveMission(null, { name: name, createdAt: new Date().toISOString() });
+        mFormMode = null; $("m-form").hidden = true;
+        setSelMission(id);
+        $("f-mission").value = id;
+        mMsg("Mission « " + name + " » créée. Les vols saisis y seront rattachés.", "ok");
+      } else {
+        var m = missionById(currentMission());
+        await saveMission(m.id, { name: name, createdAt: m.createdAt || new Date().toISOString() });
+        closeMForm();
+        mMsg("Mission renommée.", "ok");
+      }
+    } catch (e) { mMsg(errText(e), "err"); }
+    finally { $("m-save").disabled = false; }
+  }
+
+  async function onMDelete() {
+    var m = missionById(currentMission()); if (!m) return;
+    var n = flights.filter(function (f) { return f.mission === m.id; }).length;
+    var btn = $("m-delete");
+    if (n) { mMsg("Cette mission contient " + n + " vol" + (n > 1 ? "s" : "") + ". Supprimez-les ou rattachez-les à une autre mission avant de supprimer la mission.", "err"); return; }
+    if (!mDelArmed) {
+      btn.classList.add("armed"); btn.textContent = "Confirmer la suppression";
+      mDelArmed = setTimeout(function () { mDelArmed = null; btn.classList.remove("armed"); btn.textContent = "Supprimer"; }, 4000);
+      return;
+    }
+    clearTimeout(mDelArmed); mDelArmed = null; btn.classList.remove("armed"); btn.textContent = "Supprimer";
+    try { await removeMission(m.id); setSelMission(""); mMsg("Mission supprimée.", "ok"); }
+    catch (e) { mMsg(errText(e), "err"); }
+  }
+
+  function exportName() {
+    var cur = currentMission();
+    if (cur && cur !== NONE) return missionById(cur).name;
+    if (cur === NONE) return "Sans mission";
+    return periodSlug();
+  }
+  function safeName(s, max) { return s.replace(/[\\\/:*?"<>|\[\]]/g, "-").replace(/\.+/g, ".").replace(/[.\s]+$/, "").trim().slice(0, max) || "Cloture"; }
+
+  /* ---------- Formulaire ---------- */
+  var editingId = null;
+  var listSort = lsGet("cloture.sort") === "dur" ? "dur" : "date";
+
+  function buildForm() {
+    function durCell(box, id, label, tag, cls) {
+      var cell = el("div", "hcell " + cls);
+      var lab = el("label"); lab.htmlFor = "f-" + id;
+      lab.appendChild(document.createTextNode(label));
+      if (tag) lab.appendChild(el("small", null, tag));
+      var inp = el("input"); inp.type = "text"; inp.id = "f-" + id; inp.inputMode = "decimal"; inp.placeholder = "0,0"; inp.autocomplete = "off";
+      var parsed = el("div", "parsed"); parsed.id = "p-" + id;
+      inp.addEventListener("input", updateTot);
+      cell.appendChild(lab); cell.appendChild(inp); cell.appendChild(parsed);
+      var subs = subsOf(id);
+      if (subs.length) {
+        var wrap = el("div", "subs");
+        wrap.appendChild(el("span", "subhead", "dont"));
+        subs.forEach(function (s) {
+          var row = el("div", "subrow"); row.id = "r-d-" + s.k;
+          var sl = el("label", null, s.short); sl.setAttribute("aria-label", label + " " + s.label); sl.htmlFor = "f-d-" + s.k;
+          var si = el("input"); si.type = "text"; si.id = "f-d-" + s.k; si.inputMode = "decimal"; si.placeholder = "0,0"; si.autocomplete = "off";
+          si.addEventListener("input", updateTot);
+          row.appendChild(sl); row.appendChild(si); wrap.appendChild(row);
+        });
+        cell.appendChild(wrap);
+      }
+      box.appendChild(cell);
+    }
+    CATS.forEach(function (c) { durCell($("hours"), c.k, c.label, c.night ? "nuit" : "jour", c.night ? "night" : ""); });
+    NATS.forEach(function (n) { durCell($("natures"), "n-" + n.k, n.label, "", "nat"); });
+    var counters = $("counters");
+    COUNTS.forEach(function (c) {
+      var row = el("div", "counter");
+      var lab = el("label", null, c.label); lab.htmlFor = "f-" + c.k;
+      var st = el("div", "stepper");
+      var minus = el("button", null, "−"); minus.type = "button"; minus.setAttribute("aria-label", c.label + " moins un");
+      var inp = el("input"); inp.type = "text"; inp.id = "f-" + c.k; inp.inputMode = "numeric"; inp.value = "0"; inp.autocomplete = "off";
+      var plus = el("button", null, "+"); plus.type = "button"; plus.setAttribute("aria-label", c.label + " plus un");
+      minus.addEventListener("click", function () { var v = parseInt(inp.value, 10) || 0; inp.value = Math.max(0, v - 1); });
+      plus.addEventListener("click", function () { var v = parseInt(inp.value, 10) || 0; inp.value = v + 1; });
+      inp.addEventListener("focus", function () { inp.select(); });
+      st.appendChild(minus); st.appendChild(inp); st.appendChild(plus);
+      row.appendChild(lab); row.appendChild(st);
+      counters.appendChild(row);
+    });
+    $("f-date").value = todayIso();
+    $("form").addEventListener("submit", onSubmit);
+    $("f-cancel").addEventListener("click", resetForm);
+    updateTot();
+  }
+
+  // Valeur d'un champ d'heures : si le champ affiche encore la valeur d'origine d'un vol en modification, on garde la valeur exacte
+  function readDur(inp) {
+    if (inp.dataset.disp != null && inp.value === inp.dataset.disp) return Number(inp.dataset.min);
+    return parseDur(inp.value);
+  }
+
+  function checkCell(id) {
+    var inp = $("f-" + id), v = readDur(inp), cell = inp.parentNode, p = $("p-" + id);
+    if (isNaN(v)) { cell.classList.add("bad"); p.textContent = "écrire un nombre, ex. 1,5"; return NaN; }
+    cell.classList.remove("bad");
+    p.textContent = /[:h]/i.test(inp.value) ? "= " + fmtDur(v) + " h" : "";
+    return v;
+  }
+  function updateTot() {
+    var t = 0, bad = false, s = 0, badN = false;
+    CATS.forEach(function (c) {
+      var v = checkCell(c.k); if (isNaN(v)) bad = true; else t += v;
+      subsOf(c.k).forEach(function (s) {
+        var w = readDur($("f-d-" + s.k)), row = $("r-d-" + s.k), p = $("p-" + c.k);
+        var ko = isNaN(w) || (!isNaN(v) && w > v + 1e-6);
+        row.classList.toggle("bad", ko);
+        if (ko) { bad = true; p.textContent = isNaN(w) ? s.label + " : écrire un nombre" : s.label + " dépasse " + c.label; }
+      });
+    });
+    NATS.forEach(function (n) { var v = checkCell("n-" + n.k); if (isNaN(v)) badN = true; else s += v; });
+    $("f-tot").textContent = bad ? "—" : fmtDur(t);
+    var box = $("nat-check"); box.textContent = "";
+    var left = el("span"), right = el("span", "num");
+    if (bad || badN) { box.className = "check warn"; left.textContent = "Corrigez les cases en rouge."; }
+    else if (s === 0) { box.className = "check"; left.textContent = "À répartir"; right.textContent = fmtDur(t) + " h"; }
+    else if (Math.abs(s - t) < 0.01) { box.className = "check ok"; left.textContent = "Répartition égale au TOT"; right.textContent = fmtDur(s) + " h"; }
+    else { box.className = "check warn"; left.textContent = s < t ? "Il reste " + fmtDur(t - s) + " h à répartir" : "Répartition supérieure au TOT de " + fmtDur(s - t) + " h"; right.textContent = fmtDur(s) + " / " + fmtDur(t) + " h"; }
+    box.appendChild(left); box.appendChild(right);
+  }
+
+  async function onSubmit(ev) {
+    ev.preventDefault();
+    var msg = $("f-msg"); msg.className = "msg"; msg.textContent = "";
+    var date = $("f-date").value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { return fail("Indiquez la date du vol."); }
+    var h = {}, tot = 0;
+    for (var i = 0; i < CATS.length; i++) {
+      var v = readDur($("f-" + CATS[i].k));
+      if (isNaN(v)) return fail(CATS[i].label + " : écrivez la durée en décimal, par exemple 1,5.");
+      h[CATS[i].k] = v; tot += v;
+    }
+    var d = {};
+    for (var z = 0; z < SUBS.length; z++) {
+      var sv = readDur($("f-d-" + SUBS[z].k));
+      if (isNaN(sv)) return fail(catLabel(SUBS[z].parent) + " " + SUBS[z].label + " : écrivez la durée en décimal, par exemple 0,5.");
+      if (sv > h[SUBS[z].parent] + 1e-6) return fail(catLabel(SUBS[z].parent) + " " + SUBS[z].label + " (" + fmtDur(sv) + " h) ne peut pas dépasser " + catLabel(SUBS[z].parent) + " (" + fmtDur(h[SUBS[z].parent]) + " h).");
+      d[SUBS[z].k] = sv;
+    }
+    var nat = {}, nsum = 0;
+    for (var q = 0; q < NATS.length; q++) {
+      var w = readDur($("f-n-" + NATS[q].k));
+      if (isNaN(w)) return fail(NATS[q].label + " : écrivez la durée en décimal, par exemple 1,5.");
+      nat[NATS[q].k] = w; nsum += w;
+    }
+    if (nsum > 0 && Math.abs(nsum - tot) >= 0.01) return fail("La répartition VT, MEP A/R, ZONE et DIVERS (" + fmtDur(nsum) + " h) doit être égale au TOT (" + fmtDur(tot) + " h).");
+    var meca = parseNum($("f-meca").value);
+    if (isNaN(meca)) return fail("MECA : saisissez un nombre.");
+    var data = { date: date, mission: $("f-mission").value || "", nat: nat, h: h, d: d, meca: meca, note: $("f-note").value.trim() };
+    var anyCount = false;
+    for (var j = 0; j < COUNTS.length; j++) {
+      var raw = $("f-" + COUNTS[j].k).value.trim(), n = raw === "" ? 0 : Number(raw);
+      if (!(n >= 0) || Math.floor(n) !== n) return fail(COUNTS[j].label + " : saisissez un nombre entier.");
+      data[COUNTS[j].k] = n; if (n > 0) anyCount = true;
+    }
+    if (tot === 0 && meca === 0 && !anyCount) return fail("Le vol est vide : saisissez au moins une durée.");
+    data.updatedAt = new Date().toISOString();
+
+    var btn = $("f-submit"); btn.disabled = true;
+    var wasEditing = !!editingId;
+    try {
+      await saveFlight(editingId, data);
+      focusOnDate(date);
+      resetForm();
+      msg.className = "msg ok"; msg.textContent = wasEditing ? "Vol mis à jour." : "Vol du " + longDate(date) + " enregistré (" + fmtDur(tot) + ").";
+    } catch (e) { fail(errText(e)); }
+    finally { btn.disabled = false; }
+
+    function fail(t) { msg.className = "msg err"; msg.textContent = t; return false; }
+  }
+
+  function resetForm() {
+    editingId = null;
+    CATS.map(function (c) { return c.k; }).concat(NATS.map(function (n) { return "n-" + n.k; }), SUBS.map(function (s) { return "d-" + s.k; })).forEach(function (id) {
+      var i = $("f-" + id); i.value = ""; delete i.dataset.disp; delete i.dataset.min;
+    });
+    COUNTS.forEach(function (c) { $("f-" + c.k).value = "0"; });
+    $("f-meca").value = ""; $("f-note").value = "";
+    delete $("f-mission").dataset.touched;
+    $("f-mission").value = missionById(currentMission()) ? currentMission() : "";
+    $("f-date").value = todayIso();
+    $("form-title").textContent = "Nouveau vol";
+    $("f-submit").textContent = "Enregistrer le vol";
+    $("f-cancel").hidden = true;
+    updateTot(); render();
+  }
+
+  function editFlight(f) {
+    editingId = f.id;
+    $("f-date").value = f.date;
+    $("f-mission").value = hasMission(f) ? f.mission : "";
+    function fill(id, v) { var i = $("f-" + id); i.value = v ? fmtDur(v) : ""; i.dataset.disp = i.value; i.dataset.min = String(v); }
+    CATS.forEach(function (c) { fill(c.k, (f.h && f.h[c.k]) || 0); });
+    NATS.forEach(function (n) { fill("n-" + n.k, natMin(f, n.k)); });
+    SUBS.forEach(function (s) { fill("d-" + s.k, subMin(f, s.k)); });
+    COUNTS.forEach(function (c) { $("f-" + c.k).value = f[c.k] || 0; });
+    $("f-meca").value = f.meca ? String(f.meca).replace(".", ",") : "";
+    $("f-note").value = f.note || "";
+    $("form-title").textContent = "Modifier le vol";
+    $("f-submit").textContent = "Mettre à jour";
+    $("f-cancel").hidden = false;
+    $("f-msg").textContent = "";
+    updateTot(); render();
+    $("form-title").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ---------- Période ---------- */
+  var now = new Date();
+  var period = { mode: "month", y: now.getFullYear(), m: now.getMonth(), from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: todayIso() };
+
+  function focusOnDate(d) {
+    var y = +d.slice(0, 4), m = +d.slice(5, 7) - 1;
+    if (period.mode === "month") { period.y = y; period.m = m; }
+    else if (period.mode === "year") { period.y = y; }
+  }
+  function bounds() {
+    if (period.mode === "month") return [iso(new Date(period.y, period.m, 1)), iso(new Date(period.y, period.m + 1, 0))];
+    if (period.mode === "year") return [period.y + "-01-01", period.y + "-12-31"];
+    var a = period.from || "0000-01-01", b = period.to || "9999-12-31";
+    return a <= b ? [a, b] : [b, a];
+  }
+  function periodLabel() {
+    if (period.mode === "month") return MONTHS[period.m] + " " + period.y;
+    if (period.mode === "year") return String(period.y);
+    var b = bounds(); return b[0] + " → " + b[1];
+  }
+  function periodSlug() {
+    if (period.mode === "month") return period.y + "-" + pad(period.m + 1);
+    if (period.mode === "year") return String(period.y);
+    var b = bounds(); return b[0] + "_" + b[1];
+  }
+  function shift(d) {
+    if (period.mode === "month") { var t = new Date(period.y, period.m + d, 1); period.y = t.getFullYear(); period.m = t.getMonth(); }
+    else if (period.mode === "year") period.y += d;
+    render();
+  }
+
+  /* ---------- Calculs ---------- */
+  function byDate(a, c) { return a.date < c.date ? -1 : a.date > c.date ? 1 : (a.updatedAt || "") < (c.updatedAt || "") ? -1 : 1; }
+  function inPeriod(list) {
+    var b = bounds();
+    return list.filter(function (f) { return f.date >= b[0] && f.date <= b[1]; }).sort(byDate);
+  }
+  // Vols affichés : ceux de la mission choisie (toutes dates), sinon ceux de la période
+  function scopedFlights() {
+    var mid = currentMission();
+    if (mid) return flights.filter(function (f) { return inMission(f, mid); }).sort(byDate);
+    return inPeriod(flights);
+  }
+  function summarize(list) {
+    var all = { n: 0, tot: 0, meca: 0 }, nb = {};
+    CATS.forEach(function (c) { all[c.k] = 0; nb[c.k] = 0; });
+    COUNTS.forEach(function (c) { all[c.k] = 0; });
+    list.forEach(function (f) {
+      all.n += 1;
+      CATS.forEach(function (c) { var v = (f.h && f.h[c.k]) || 0; all[c.k] += v; all.tot += v; if (v) nb[c.k] += 1; });
+      all.meca += f.meca || 0;
+      COUNTS.forEach(function (c) { all[c.k] += f[c.k] || 0; });
+    });
+    // Natures rangées dans `all` sous les clés n-vt, n-mep… (utiles aussi pour l'export)
+    var sumJ = 0, sumN = 0;
+    all.day = 0; all.night = 0;
+    CATS.forEach(function (c) { if (c.night) all.night += all[c.k]; else all.day += all[c.k]; });
+    NATS.forEach(function (n) { all["n-" + n.k] = 0; all["nJ-" + n.k] = 0; all["nN-" + n.k] = 0; nb["n-" + n.k] = 0; });
+    list.forEach(function (f) {
+      NATS.forEach(function (n) {
+        var j = natSide(f, n.k, "J"), q = natSide(f, n.k, "N");
+        all["nJ-" + n.k] += j; all["nN-" + n.k] += q; all["n-" + n.k] += j + q;
+        sumJ += j; sumN += q; if (j + q) nb["n-" + n.k] += 1;
+      });
+    });
+    all.unassignedJ = all.day - sumJ;
+    all.unassignedN = all.night - sumN;
+    SUBS.forEach(function (s) { all["d-" + s.k] = 0; nb["d-" + s.k] = 0; });
+    list.forEach(function (f) { SUBS.forEach(function (s) { var v = subMin(f, s.k); all["d-" + s.k] += v; if (v) nb["d-" + s.k] += 1; }); });
+    return { all: all, nb: nb };
+  }
+
+  /* ---------- Exemple (affiché seulement tant qu'aucun vol n'existe) ---------- */
+  function demoFlights() {
+    var b = bounds(), y = +b[0].slice(0, 4), m = +b[0].slice(5, 7) - 1;
+    function d(day) { return iso(new Date(y, m, day)); }
+    return [
+      { date: d(3),  nat: { vt: 0, mep: 45, zone: 30, divers: 0 }, h: { cagIfrJ: 0, cagIfrN: 0, cagVfrJ: 30, camVJ: 45, camTJ: 0, camTN: 0 }, meca: 0, att: 4, rappel: 0, corde: 0, nacelle: 0, sling: 0 },
+      { date: d(6),  nat: { vt: 70, mep: 0, zone: 0, divers: 0 }, h: { cagIfrJ: 70, cagIfrN: 0, cagVfrJ: 0, camVJ: 0, camTJ: 0, camTN: 0 }, meca: 0, att: 2, rappel: 0, corde: 0, nacelle: 0, sling: 0 },
+      { date: d(10), nat: { vt: 0, mep: 25, zone: 60, divers: 0 }, h: { cagIfrJ: 0, cagIfrN: 0, cagVfrJ: 0, camVJ: 0, camTJ: 85, camTN: 0 }, meca: 1, att: 6, rappel: 2, corde: 3, nacelle: 0, sling: 0 },
+      { date: d(14), nat: { vt: 0, mep: 30, zone: 70, divers: 10 }, h: { cagIfrJ: 0, cagIfrN: 0, cagVfrJ: 0, camVJ: 0, camTJ: 0, camTN: 110 }, meca: 0, att: 5, rappel: 0, corde: 0, nacelle: 1, sling: 2 },
+      { date: d(17), nat: { vt: 0, mep: 60, zone: 0, divers: 0 }, h: { cagIfrJ: 0, cagIfrN: 40, cagVfrJ: 20, camVJ: 0, camTJ: 0, camTN: 0 }, meca: 0, att: 3, rappel: 0, corde: 0, nacelle: 0, sling: 0 }
+    ];
+  }
+
+  /* ---------- Rendu ---------- */
+  var downloads = null;
+
+  function render() {
+    // Période
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mode]"), function (b) { b.setAttribute("aria-pressed", b.dataset.mode === period.mode ? "true" : "false"); });
+    $("nav").hidden = period.mode === "range";
+    $("range").hidden = period.mode !== "range";
+    $("plabel").textContent = periodLabel();
+    var mid = currentMission();
+    $("period-box").hidden = !!mid;
+    $("recap-title").textContent = mid ? "Récapitulatif de la mission" : "Récapitulatif";
+    $("list-title").firstChild.textContent = mid ? "Vols de la mission " : "Vols de la période ";
+
+    var demo = loaded && flights.length === 0;
+    var real = scopedFlights();
+    renderMissionBar(real);
+    var list = demo ? demoFlights() : real;
+    $("demo").hidden = !demo;
+    var s = summarize(list);
+
+    // Tuiles
+    var day = 0, night = 0;
+    CATS.forEach(function (c) { if (c.night) night += s.all[c.k]; else day += s.all[c.k]; });
+    var tiles = $("tiles"); tiles.textContent = "";
+    [["Total heures", fmtDur(s.all.tot), ""], ["Jour", fmtDur(day), "day"], ["Nuit", fmtDur(night), "night"], ["Vols", String(s.all.n), ""], ["Atterrissages", fmtNum(s.all.att), ""]]
+      .forEach(function (t) { var d = el("div", "tile"); d.appendChild(el("span", "label", t[0])); d.appendChild(el("span", "v " + t[2], t[1])); tiles.appendChild(d); });
+
+    // Barres
+    var bars = $("bars"); bars.textContent = "";
+    var max = 0; CATS.forEach(function (c) { max = Math.max(max, s.all[c.k]); });
+    CATS.forEach(function (c) {
+      var row = el("div", "bar" + (c.night ? " night" : ""));
+      row.appendChild(el("span", "n", c.label));
+      var tr = el("div", "track"); var fl = el("div", "fill");
+      fl.style.width = max ? (s.all[c.k] / max * 100).toFixed(1) + "%" : "0%";
+      tr.appendChild(fl); row.appendChild(tr);
+      row.appendChild(el("span", "val", fmtDur(s.all[c.k])));
+      bars.appendChild(row);
+    });
+
+    // Détail par type de vol, trié par durée décroissante
+    var table = $("table"); table.textContent = "";
+    var thead = el("thead"), hr = el("tr");
+    ["Type de vol", "Heures", "Vols"].forEach(function (h) { var th = el("th", null, h); th.scope = "col"; hr.appendChild(th); });
+    thead.appendChild(hr); table.appendChild(thead);
+    var tb = el("tbody");
+    function cell(text, v) { return el("td", v ? null : "zero", text); }
+    CATS.slice().sort(function (a, b) { return s.all[b.k] - s.all[a.k]; }).forEach(function (c) {
+      var v = s.all[c.k], tr = el("tr");
+      tr.appendChild(el("td", "code", c.label + (c.night ? " · nuit" : " · jour")));
+      tr.appendChild(cell(fmtDur(v), v));
+      tr.appendChild(cell(String(s.nb[c.k]), s.nb[c.k]));
+      tb.appendChild(tr);
+      subsOf(c.k).forEach(function (sb) {
+        var w = s.all["d-" + sb.k], ts = el("tr", "dont");
+        ts.appendChild(el("td", "code", sb.label));
+        ts.appendChild(el("td", null, fmtDur(w)));
+        ts.appendChild(el("td", null, String(s.nb["d-" + sb.k])));
+        tb.appendChild(ts);
+      });
+    });
+    var trt = el("tr", "total");
+    trt.appendChild(el("td", "code", "Total"));
+    trt.appendChild(el("td", null, fmtDur(s.all.tot)));
+    trt.appendChild(el("td", null, String(s.all.n)));
+    tb.appendChild(trt);
+    table.appendChild(tb);
+
+    // Heures par nature de vol
+    var nt = $("natTable"); nt.textContent = "";
+    var nh = el("thead"), nhr = el("tr");
+    [["Nature", ""], ["Jour", "jcol"], ["Nuit", "ncol"], ["Total", ""], ["Vols", ""]].forEach(function (h) { var th = el("th", h[1] || null, h[0]); th.scope = "col"; nhr.appendChild(th); });
+    nh.appendChild(nhr); nt.appendChild(nh);
+    var nb = el("tbody");
+    NATS.slice().sort(function (a, b) { return s.all["n-" + b.k] - s.all["n-" + a.k]; }).forEach(function (n) {
+      var v = s.all["n-" + n.k], j = s.all["nJ-" + n.k], q = s.all["nN-" + n.k], c = s.nb["n-" + n.k], tr = el("tr");
+      tr.appendChild(el("td", "code", n.label));
+      tr.appendChild(cell(fmtDur(j), j));
+      tr.appendChild(cell(fmtDur(q), q));
+      tr.appendChild(cell(fmtDur(v), v));
+      tr.appendChild(cell(String(c), c));
+      nb.appendChild(tr);
+    });
+    var uj = s.all.unassignedJ, un = s.all.unassignedN;
+    if (Math.abs(uj) >= 0.01 || Math.abs(un) >= 0.01) {
+      var tu = el("tr", "sub");
+      tu.appendChild(el("td", "code", "Non réparti"));
+      tu.appendChild(el("td", null, fmtDur(uj)));
+      tu.appendChild(el("td", null, fmtDur(un)));
+      tu.appendChild(el("td", null, fmtDur(uj + un)));
+      tu.appendChild(el("td", null, ""));
+      nb.appendChild(tu);
+    }
+    var tnt = el("tr", "total");
+    tnt.appendChild(el("td", "code", "Total"));
+    tnt.appendChild(el("td", null, fmtDur(s.all.day)));
+    tnt.appendChild(el("td", null, fmtDur(s.all.night)));
+    tnt.appendChild(el("td", null, fmtDur(s.all.tot)));
+    tnt.appendChild(el("td", null, String(s.all.n)));
+    nb.appendChild(tnt);
+    nt.appendChild(nb);
+    var mixed = list.filter(isMixed).length;
+    $("nat-note").hidden = !mixed;
+    $("nat-note").textContent = mixed ? mixed + (mixed > 1 ? " vols mêlent" : " vol mêle") + " jour et nuit : pour " + (mixed > 1 ? "ces vols" : "ce vol") + ", la répartition par nature est ventilée entre J et N au prorata de ses heures de jour et de nuit." : "";
+
+    // MECA et travaux
+    var works = $("works"); works.textContent = "";
+    works.appendChild(el("span", "pill cnt", "MECA " + fmtNum(s.all.meca)));
+    COUNTS.forEach(function (c) { works.appendChild(el("span", "pill cnt", c.label + " " + fmtNum(s.all[c.k]))); });
+
+    // Export
+    $("export").hidden = !downloads;
+    $("export").disabled = real.length === 0;
+
+    // Liste
+    renderList(real);
+  }
+
+  function renderList(list) {
+    var box = $("flights"); box.textContent = "";
+    $("list-count").textContent = list.length ? list.length + " vol" + (list.length > 1 ? "s" : "") : "";
+    if (!loaded) { box.appendChild(el("div", "empty", "Chargement des vols…")); return; }
+    if (!list.length) {
+      box.appendChild(el("div", "empty", flights.length ? "Aucun vol sur cette période." : "Aucun vol enregistré. Remplissez le formulaire « Nouveau vol » : il apparaîtra ici et dans le récapitulatif."));
+      return;
+    }
+    var sorted = listSort === "dur"
+      ? list.slice().sort(function (a, b) { return totOf(b) - totOf(a) || (a.date < b.date ? 1 : -1); })
+      : list.slice().reverse();
+    sorted.forEach(function (f) {
+      var card = el("article", "flight" + (f.id === editingId ? " editing" : ""));
+      var r1 = el("div", "frow");
+      var left = el("div"); left.appendChild(el("span", "fdate", longDate(f.date)));
+      if (!currentMission() && hasMission(f)) left.appendChild(el("span", "mtag", missionById(f.mission).name));
+      r1.appendChild(left); r1.appendChild(el("span", "ftot", fmtDur(totOf(f))));
+      card.appendChild(r1);
+      var npills = el("div", "pills");
+      NATS.forEach(function (n) { var v = natMin(f, n.k); if (v) npills.appendChild(el("span", "pill nat", n.label + " " + fmtDur(v))); });
+      if (npills.children.length) card.appendChild(npills);
+      var pills = el("div", "pills");
+      CATS.forEach(function (c) {
+        var v = (f.h && f.h[c.k]) || 0; if (!v) return;
+        pills.appendChild(el("span", "pill" + (c.night ? " night" : ""), c.label + " " + fmtDur(v)));
+        subsOf(c.k).forEach(function (sb) { var w = subMin(f, sb.k); if (w) pills.appendChild(el("span", "pill dont", sb.label + " " + fmtDur(w))); });
+      });
+      if (f.meca) pills.appendChild(el("span", "pill cnt", "MECA " + fmtNum(f.meca)));
+      COUNTS.forEach(function (c) { if (f[c.k]) pills.appendChild(el("span", "pill cnt", c.label + " " + f[c.k])); });
+      if (pills.children.length) card.appendChild(pills);
+      if (f.note) card.appendChild(el("p", "fnote", f.note));
+      var act = el("div", "actions");
+      var eb = el("button", "btn small", "Modifier"); eb.type = "button";
+      eb.addEventListener("click", function () { editFlight(f); });
+      var db = el("button", "btn small danger", "Supprimer"); db.type = "button";
+      var armed = null;
+      db.addEventListener("click", async function () {
+        if (!armed) {
+          db.classList.add("armed"); db.textContent = "Confirmer la suppression";
+          armed = setTimeout(function () { armed = null; db.classList.remove("armed"); db.textContent = "Supprimer"; }, 4000);
+          return;
+        }
+        clearTimeout(armed); db.disabled = true;
+        try { await removeFlight(f.id); if (editingId === f.id) resetForm(); }
+        catch (e) { db.disabled = false; $("f-msg").className = "msg err"; $("f-msg").textContent = errText(e); }
+      });
+      act.appendChild(eb); act.appendChild(db);
+      card.appendChild(act);
+      box.appendChild(card);
+    });
+  }
+
+  /* ---------- Export .xlsx au format du fichier Clôture ---------- */
+  function excelSerial(isoStr) {
+    var p = isoStr.split("-");
+    return (Date.UTC(+p[0], +p[1] - 1, +p[2]) - Date.UTC(1899, 11, 30)) / 86400000;
+  }
+  function colL(i) { var s = ""; i += 1; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; } // 0 -> A, 26 -> AA
+
+  function buildWorkbook(list) {
+    var XLSX = window.XLSX;
+    // Colonnes : DATE · heures par type · TOT · MECA · travaux · heures « dont » · répartition · Remarques
+    var cols = [];
+    CATS.forEach(function (c) { cols.push({ head: c.label, key: c.k, hours: true, get: function (f) { return (f.h && f.h[c.k]) || 0; } }); });
+    var firstCat = 1, lastCat = CATS.length;
+    cols.push({ head: "TOT", key: "tot", hours: true, tot: true });
+    cols.push({ head: "MECA", key: "meca", get: function (f) { return f.meca || 0; } });
+    COUNTS.forEach(function (c) { cols.push({ head: c.col, key: c.k, get: function (f) { return f[c.k] || 0; } }); });
+    SUBS.forEach(function (sb) { cols.push({ head: catLabel(sb.parent) + " " + sb.label, key: "d-" + sb.k, hours: true, get: function (f) { return subMin(f, sb.k); } }); });
+    NATS.forEach(function (x) {
+      SIDES.forEach(function (sd) { cols.push({ head: x.label + " " + sd.s, key: "n" + sd.s + "-" + x.k, hours: true, get: function (f) { return natSide(f, x.k, sd.s); } }); });
+    });
+    var noteCol = cols.length + 1;
+
+    var ws = {}, n = list.length, last = n + 1;
+    function put(r, c, cellObj) { ws[colL(c) + r] = cellObj; }
+    put(1, 0, { t: "s", v: "DATE" });
+    cols.forEach(function (col, j) { put(1, j + 1, { t: "s", v: col.head }); });
+    put(1, noteCol, { t: "s", v: "Remarques" });
+    list.forEach(function (f, i) {
+      var r = i + 2;
+      put(r, 0, { t: "n", v: excelSerial(f.date), z: "d-mmm" });
+      cols.forEach(function (col, j) {
+        if (col.tot) { put(r, j + 1, { t: "n", v: totOf(f) / 60, f: "SUM(" + colL(firstCat) + r + ":" + colL(lastCat) + r + ")", z: "0.00" }); return; }
+        var v = col.get(f); if (!v) return;
+        put(r, j + 1, col.hours ? { t: "n", v: v / 60, z: "0.00" } : { t: "n", v: v });
+      });
+      if (f.note) put(r, noteCol, { t: "s", v: f.note });
+    });
+    // Ligne TOTAL (valeurs calculées pour l'affichage avant recalcul)
+    var s = summarize(list), rt = n + 2;
+    put(rt, 0, { t: "s", v: "TOTAL" });
+    cols.forEach(function (col, j) {
+      var L = colL(j + 1), v = s.all[col.key];
+      var cellObj = { t: "n", v: col.hours ? v / 60 : v, f: "SUM(" + L + "2:" + L + last + ")" };
+      if (col.hours) cellObj.z = "0.00";
+      put(rt, j + 1, cellObj);
+    });
+    ws["!ref"] = "A1:" + colL(noteCol) + rt;
+    ws["!cols"] = [{ wch: 9 }].concat(cols.map(function (c) { return { wch: Math.max(8, Math.min(24, c.head.length + 2)) }; }), [{ wch: 28 }]);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, safeName(exportName(), 31));
+    return XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  }
+
+  async function onExport() {
+    var msg = $("x-msg"); msg.hidden = false; msg.className = "msg"; msg.textContent = "";
+    var list = scopedFlights();
+    if (!list.length) { msg.className = "msg err"; msg.textContent = "Aucun vol sur cette période."; return; }
+    if (!window.XLSX) { msg.className = "msg err"; msg.textContent = "Le module Excel n'est pas encore chargé, réessayez dans un instant."; return; }
+    try {
+      var buf = buildWorkbook(list);
+      await downloads.save({ filename: "Cloture_" + safeName(exportName(), 80).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w.-]+/g, "_") + ".xlsx", data: new Blob([buf]) });
+      msg.className = "msg ok"; msg.textContent = "Fichier de clôture enregistré.";
+    } catch (e) {
+      var c = e && e.code;
+      if (c === "declined") { msg.hidden = true; return; }
+      msg.className = "msg err";
+      msg.textContent = c === "rate_limited" ? "Une demande d'enregistrement est déjà ouverte." : "L'export n'est pas disponible ici.";
+    }
+  }
+
+  /* ---------- Événements ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll("[data-mode]"), function (b) {
+    b.addEventListener("click", function () { period.mode = b.dataset.mode; render(); });
+  });
+  $("prev").addEventListener("click", function () { shift(-1); });
+  $("next").addEventListener("click", function () { shift(1); });
+  $("r-from").value = period.from; $("r-to").value = period.to;
+  $("r-from").addEventListener("change", function () { period.from = this.value; render(); });
+  $("r-to").addEventListener("change", function () { period.to = this.value; render(); });
+  $("export").addEventListener("click", onExport);
+  $("m-select").addEventListener("change", function () { mMsg(""); delete $("f-mission").dataset.touched; setSelMission(this.value); });
+  $("f-mission").addEventListener("change", function () { this.dataset.touched = "1"; });
+  $("m-new").addEventListener("click", function () { openMForm("new"); });
+  $("m-rename").addEventListener("click", function () { openMForm("rename"); });
+  $("m-delete").addEventListener("click", onMDelete);
+  $("m-cancel").addEventListener("click", function () { mMsg(""); closeMForm(); });
+  $("m-form").addEventListener("submit", onMSubmit);
+  function setSort(m) {
+    listSort = m; lsSet("cloture.sort", m);
+    $("sort-date").setAttribute("aria-pressed", m === "date" ? "true" : "false");
+    $("sort-dur").setAttribute("aria-pressed", m === "dur" ? "true" : "false");
+    render();
+  }
+  $("sort-date").addEventListener("click", function () { setSort("date"); });
+  $("sort-dur").addEventListener("click", function () { setSort("dur"); });
+  setSort(listSort);
+
+  /* ---------- Fichiers : partage iPad ou téléchargement ---------- */
+  var MIME = { xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", json: "application/json" };
+  async function saveFile(filename, data) {
+    var ext = filename.split(".").pop().toLowerCase();
+    var blob = new Blob([data], { type: MIME[ext] || "application/octet-stream" });
+    var file = null;
+    try { file = new File([blob], filename, { type: blob.type }); } catch (e) { file = null; }
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return { status: "saved" }; }
+      catch (e) { if (e && e.name === "AbortError") throw { code: "declined" }; }
+    }
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 5000);
+    return { status: "saved" };
+  }
+
+  /* ---------- Sauvegarde et restauration des données ---------- */
+  function bMsg(text, kind) { var m = $("b-msg"); m.className = "msg bmsg " + (kind || ""); m.textContent = text; }
+  function backupInfo() {
+    var last = lsGet("cloture.lastBackup");
+    bMsg(last ? "Dernière sauvegarde : " + new Date(last).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) + "."
+              : (flights.length ? "Aucune sauvegarde pour l'instant : pensez à sauvegarder vos données régulièrement." : ""), last ? "" : (flights.length ? "err" : ""));
+  }
+  async function onBackup() {
+    var payload = { app: "cloture-vols", version: 1, exportedAt: new Date().toISOString(), missions: missions, flights: flights };
+    try {
+      await saveFile("Cloture_sauvegarde_" + todayIso() + ".json", JSON.stringify(payload));
+      lsSet("cloture.lastBackup", new Date().toISOString());
+      backupInfo();
+    } catch (e) { if (!(e && e.code === "declined")) bMsg("La sauvegarde n'a pas pu être créée.", "err"); }
+  }
+  function onRestoreFile(ev) {
+    var f = ev.target.files && ev.target.files[0]; ev.target.value = "";
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data;
+      try { data = JSON.parse(reader.result); } catch (e) { bMsg("Ce fichier n'est pas une sauvegarde valide.", "err"); return; }
+      if (!data || data.app !== "cloture-vols" || !Array.isArray(data.flights) || !Array.isArray(data.missions)) { bMsg("Ce fichier n'est pas une sauvegarde de Clôture des vols.", "err"); return; }
+      // Fusion : les éléments de la sauvegarde remplacent ceux qui ont le même identifiant, les autres sont conservés
+      var fm = {}, mm = {}, addF = 0, addM = 0;
+      flights.forEach(function (x) { fm[x.id] = x; }); missions.forEach(function (x) { mm[x.id] = x; });
+      data.flights.forEach(function (x) { if (x && x.id && x.date) { if (!fm[x.id]) addF++; fm[x.id] = x; } });
+      data.missions.forEach(function (x) { if (x && x.id && x.name) { if (!mm[x.id]) addM++; mm[x.id] = x; } });
+      flights = Object.keys(fm).map(function (k) { return fm[k]; });
+      missions = Object.keys(mm).map(function (k) { return mm[k]; }); sortMissions();
+      saveLocal(); saveLocalMissions(); render();
+      bMsg("Sauvegarde restaurée : " + addF + " vol" + (addF > 1 ? "s" : "") + " et " + addM + " mission" + (addM > 1 ? "s" : "") + " ajoutés.", "ok");
+    };
+    reader.readAsText(f);
+  }
+  $("b-save").addEventListener("click", onBackup);
+  $("b-load").addEventListener("click", function () { $("b-file").click(); });
+  $("b-file").addEventListener("change", onRestoreFile);
+  if (navigator.storage && navigator.storage.persist) { try { navigator.storage.persist(); } catch (e) {} }
+
+  buildForm();
+  render();
+  initStore();
+  backupInfo();
+  (async function () {
+    downloads = { save: function (req) { return saveFile(req.filename, req.data); } };
+    render();
+  })();
+
+  // exposé pour vérification locale uniquement
+  window.__cloture = { parseDur: parseDur, summarize: summarize, buildWorkbook: buildWorkbook };
+})();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
