@@ -95,6 +95,12 @@ input[type="date"], input[type="text"], textarea, .tin {
   padding: 10px 12px; min-height: 44px;
 }
 textarea { min-height: 64px; resize: vertical; }
+/* Champ date : Safari iOS lui donne une largeur et une police propres qui débordent du cadre */
+input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; text-align: left; line-height: 1.25; font-size: 16px; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; min-width: 0; }
+input[type="date"]::-webkit-datetime-edit { padding: 0; }
+/* iOS agrandit la page quand on touche un champ écrit en moins de 16 px : on l'évite */
+@supports (-webkit-touch-callout: none) { input, select, textarea { font-size: max(16px, 1em); } }
 input:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 
 /* Heures de vol : grille type planche d'instruments */
@@ -167,7 +173,7 @@ tr.dont td:first-child { padding-left: 22px; }
 .nav button { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 18px; }
 .nav .plabel { font-family: var(--font-display); font-weight: 600; font-size: 20px; min-width: 150px; text-align: center; text-transform: capitalize; }
 .range { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.range input { width: auto; min-height: 36px; padding: 6px 8px; }
+.range input { width: 150px; min-height: 36px; padding: 6px 8px; }
 
 .demo { font-size: 13px; background: var(--day-soft); border-radius: 8px; padding: 9px 12px; }
 
